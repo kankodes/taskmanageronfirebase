@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Studio Task Manager</title>
+  <style>
+    body { font-family: 'SF Pro', Arial, sans-serif; margin: 0; padding: 20px; background: #f9f9f9; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    header h1 { margin: 0; font-size: 28px; }
+    #addTaskBtn { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    #taskList { display: flex; flex-direction: column; gap: 15px; }
+    .task-card { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .task-card h3 { margin: 0 0 10px; }
+    .task-card small { display: block; color: #555; margin-top: 5px; }
+    .badge { padding: 3px 8px; border-radius: 5px; color: white; font-size: 12px; margin-left: 5px; }
+    .badge.high { background: red; }
+    .badge.medium { background: orange; }
+    .badge.low { background: green; }
+    .badge.pending { background: grey; }
+    .badge.inprogress { background: blue; }
+    .badge.review { background: orange; }
+    .badge.approved { background: green; }
+    #popup { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; }
+    .hidden { display: none; }
+    .popup-content { background: white; padding: 20px; border-radius: 10px; width: 320px; display: flex; flex-direction: column; gap: 10px; }
+    .popup-content input, .popup-content select, .popup-content textarea { padding: 8px; font-size: 16px; border: 1px solid #ccc; border-radius: 5px; }
+    #saveTaskBtn { background: #28a745; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; }
+    #closePopupBtn { background: #dc3545; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<header>
+  <h1>Studio Task Manager</h1>
+  <button id="addTaskBtn">+ Add New Task</button>
+</header>
+
+<main>
+  <section id="taskList"></section>
+</main>
+
+<div id="popup" class="hidden">
+  <div class="popup-content">
+    <h2 id="popupTitle">New Task</h2>
+    <input type="text" id="taskTitle" placeholder="Task Title">
+    <input type="text" id="taskClient" placeholder="Client Name">
+    <input type="text" id="taskProject" placeholder="Project Name">
+    <input type="text" id="taskAssignee" placeholder="Assigned To (comma separated)">
+    <select id="taskPriority">
+      <option value="High">High</option>
+      <option value="Medium">Medium</option>
+      <option value="Low">Low</option>
+    </select>
+    <input type="date" id="taskDeadline">
+    <select id="taskStatus">
+      <option value="Pending">Pending</option>
+      <option value="In Progress">In Progress</option>
+      <option value="Review">Review</option>
+      <option value="Approved">Approved</option>
+    </select>
+    <input type="url" id="taskLink" placeholder="File Link (optional)">
+    <textarea id="taskNotes" placeholder="Notes (optional)"></textarea>
+    <button id="saveTaskBtn">Save Task</button>
+    <button id="closePopupBtn">Cancel</button>
+  </div>
+</div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCIo3QR2ln38T18dnatcmd2Km-o3Kzl8gI",
+    authDomain: "profitpenny-task-manager.firebaseapp.com",
+    projectId: "profitpenny-task-manager",
+    storageBucket: "profitpenny-task-manager.firebasestorage.app",
+    messagingSenderId: "662508175013",
+    appId: "1:662508175013:web:959a2bbf30a5cf1c4a574c"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  const addTaskBtn = document.getElementById('addTaskBtn');
+  const popup = document.getElementById('popup');
+  const saveTaskBtn = document.getElementById('saveTaskBtn');
+  const closePopupBtn = document.getElementById('closePopupBtn');
+  const taskList = document.getElementById('taskList');
+  const popupTitle = document.getElementById('popupTitle');
+
+  let editTaskId = null;
+
+  addTaskBtn.addEventListener('click', () => {
+    editTaskId = null;
+    popupTitle.innerText = 'New Task';
+    popup.classList.remove('hidden');
+    clearForm();
+  });
+
+  closePopupBtn.addEventListener('click', () => popup.classList.add('hidden'));
+
+  saveTaskBtn.addEventListener('click', async () => {
+    const task = {
+      title: document.getElementById('taskTitle').value,
+      client: document.getElementById('taskClient').value,
+      project: document.getElementById('taskProject').value,
+      assignee: document.getElementById('taskAssignee').value.split(',').map(a => a.trim()),
+      priority: document.getElementById('taskPriority').value,
+      deadline: document.getElementById('taskDeadline').value,
+      status: document.getElementById('taskStatus').value,
+      link: document.getElementById('taskLink').value,
+      notes: document.getElementById('taskNotes').value,
+      createdAt: new Date()
+    };
+
+    if (editTaskId) {
+      await db.collection('tasks').doc(editTaskId).update(task);
+    } else {
+      await db.collection('tasks').add(task);
+    }
+
+    popup.classList.add('hidden');
+    loadTasks();
+  });
+
+  function clearForm() {
+    document.getElementById('taskTitle').value = '';
+    document.getElementById('taskClient').value = '';
+    document.getElementById('taskProject').value = '';
+    document.getElementById('taskAssignee').value = '';
+    document.getElementById('taskPriority').value = 'High';
+    document.getElementById('taskDeadline').value = '';
+    document.getElementById('taskStatus').value = 'Pending';
+    document.getElementById('taskLink').value = '';
+    document.getElementById('taskNotes').value = '';
+  }
+
+  async function loadTasks() {
+    taskList.innerHTML = '';
+    const snapshot = await db.collection('tasks').orderBy('createdAt', 'desc').get();
+    snapshot.forEach(doc => {
+      const task = doc.data();
+      const div = document.createElement('div');
+      div.classList.add('task-card');
+      const today = new Date().toISOString().split('T')[0];
+      const isOverdue = task.deadline && task.deadline < today;
+      div.innerHTML = `
+        <h3>${task.title}
+          <span class="badge ${task.priority.toLowerCase()}">${task.priority}</span>
+          <span class="badge ${task.status.toLowerCase().replace(/\s/g, '')}">${task.status}</span>
+        </h3>
+        <small>Client: ${task.client} • Project: ${task.project}</small>
+        <small>Assigned: ${task.assignee.join(' • ')}</small>
+        <small style="color:${isOverdue ? 'red' : '#555'};">Deadline: ${task.deadline || '-'}</small>
+        ${task.link ? `<small><a href="${task.link}" target="_blank">Open File</a></small>` : ''}
+        ${task.notes ? `<small>Notes: ${task.notes}</small>` : ''}
+        <br/>
+        <button onclick="editTask('${doc.id}', ${JSON.stringify(task).replace(/"/g, '&quot;')})">Edit</button>
+        <button onclick="deleteTask('${doc.id}')">Delete</button>
+      `;
+      taskList.appendChild(div);
+    });
+  }
+
+  function editTask(id, task) {
+    editTaskId = id;
+    popupTitle.innerText = 'Edit Task';
+    document.getElementById('taskTitle').value = task.title;
+    document.getElementById('taskClient').value = task.client;
+    document.getElementById('taskProject').value = task.project;
+    document.getElementById('taskAssignee').value = task.assignee.join(', ');
+    document.getElementById('taskPriority').value = task.priority;
+    document.getElementById('taskDeadline').value = task.deadline;
+    document.getElementById('taskStatus').value = task.status;
+    document.getElementById('taskLink').value = task.link;
+    document.getElementById('taskNotes').value = task.notes;
+    popup.classList.remove('hidden');
+  }
+
+  async function deleteTask(id) {
+    if (confirm('Are you sure you want to delete this task?')) {
+      await db.collection('tasks').doc(id).delete();
+      loadTasks();
+    }
+  }
+
+  loadTasks();
+</script>
+
+</body>
+</html>
